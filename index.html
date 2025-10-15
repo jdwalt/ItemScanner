@@ -223,8 +223,18 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-
+                
+                // --- FIX: Check for non-200 status codes (like 400, 403, 500) ---
+                if (!response.ok) {
+                    const errorDetails = await response.text();
+                    console.error("API Response Error Body:", errorDetails);
+                    // The error message now gives a specific status code
+                    throw new Error(`API Request failed with status ${response.status}. See console for details.`);
+                }
+                
                 const result = await response.json();
+                console.log("Full Gemini API Response:", result); // Log the full response for debugging
+
                 const identifiedText = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
 
                 if (identifiedText) {
@@ -232,6 +242,8 @@
                     confirmedItemInput.value = cleanedText;
                     statusMessage.innerHTML = `<p>Gemini identified the item as: <strong>"${cleanedText}"</strong>. Please review and correct this name if necessary, then click 'Search eBay'.</p>`;
                 } else {
+                    // This error is now specifically for when the model *couldn't* identify the item, 
+                    // not for connection or API structure errors.
                     throw new Error("Gemini could not identify the item. Please try a clearer picture or manually enter the item name.");
                 }
 
@@ -275,4 +287,3 @@
     </script>
 </body>
 </html>
-
