@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eBay Sold Item Finder</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for message area */
+        .message-box::-webkit-scrollbar { width: 6px; }
+        .message-box::-webkit-scrollbar-thumb { background-color: #fca5a5; border-radius: 3px; }
+        .message-box::-webkit-scrollbar-track { background-color: #fee2e2; }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary-red': '#ef4444',
+                        'soft-red': '#fee2e2',
+                        'light-red': '#fca5a5',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4 font-sans">
+
+    <div id="app-container" class="w-full max-w-lg bg-white shadow-xl rounded-xl p-6 md:p-8 space-y-6">
+
+        <h1 class="text-3xl font-extrabold text-gray-800 text-center border-b pb-4">
+            <span class="text-primary-red">eBay</span> Image Identifier
+        </h1>
+
+        <!-- Step 1: Image Upload & Capture -->
+        <div id="step-upload" class="space-y-4">
+            <label class="block text-sm font-medium text-gray-700">1. Upload or Capture Item Picture</label>
+
+            <!-- Hidden Camera Input (Triggers camera on mobile devices) -->
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="previewImage(event)" class="hidden">
+
+            <!-- File Upload Input -->
+            <input type="file" id="fileUploadInput" accept="image/*" class="w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-sm file:font-semibold
+                file:bg-light-red file:text-white
+                hover:file:bg-primary-red
+                transition duration-150"
+                onchange="previewImage(event)">
+
+            <!-- New Camera Button -->
+            <button id="cameraButton" onclick="document.getElementById('cameraInput').click()" class="w-full py-3 px-4 bg-blue-500 text-white font-bold rounded-lg shadow-md hover:bg-blue-600 transition duration-150 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
+                  <path fill-rule="evenodd" d="M4 5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1.586a1 1 0 0 1-.707-.293l-1.121-1.121A.993.993 0 0 0 10 3H7a1 1 0 0 0-.707.293L5.293 4.293A1 1 1 4.586 5H4ZM12 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
+                </svg>
+                Take Photo with Camera
+            </button>
+
+
+            <div id="imagePreview" class="h-40 w-full bg-gray-100 rounded-lg flex items-center justify-center border border-dashed border-gray-300 overflow-hidden">
+                <p class="text-gray-400 text-sm">Preview will appear here</p>
+            </div>
+            <button id="analyzeButton" onclick="analyzeImage()" disabled class="w-full py-3 px-4 bg-primary-red text-white font-bold rounded-lg shadow-md hover:bg-red-600 transition duration-150 disabled:opacity-50">
+                Analyze Image
+            </button>
+        </div>
+
+        <!-- Step 2 & 3: Identification & Confirmation -->
+        <div id="step-confirmation" class="hidden space-y-4 pt-4 border-t border-gray-200">
+            <label class="block text-sm font-medium text-gray-700">2. Confirm Item Identification</label>
+            <div id="statusMessage" class="message-box p-3 bg-soft-red text-gray-800 rounded-lg border border-light-red max-h-32 overflow-y-auto">
+                <p>Waiting for image...</p>
+            </div>
+
+            <div class="space-y-3">
+                <label for="confirmedItem" class="block text-sm font-medium text-gray-700">Identified Item Name:</label>
+                <input type="text" id="confirmedItem" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-red focus:border-primary-red" placeholder="e.g., Vintage Rolex Submariner 1680">
+            </div>
+
+            <button onclick="openEbaySearch()" class="w-full py-3 px-4 bg-green-500 text-white font-bold rounded-lg shadow-md hover:bg-green-600 transition duration-150">
+                3. Search eBay SOLD Listings
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Constants for the Gemini API
+        const MODEL_NAME = 'gemini-2.5-flash-preview-05-20';
+        const API_KEY = ""; // Leave as-is. Canvas will inject the key at runtime.
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+        const MAX_RETRIES = 5;
+
+        // UI Elements
+        const fileUploadInput = document.getElementById('fileUploadInput'); // Renamed
+        const cameraInput = document.getElementById('cameraInput'); // New
+        const imagePreview = document.getElementById('imagePreview');
+        const analyzeButton = document.getElementById('analyzeButton');
+        const stepUpload = document.getElementById('step-upload');
+        const stepConfirmation = document.getElementById('step-confirmation');
+        const statusMessage = document.getElementById('statusMessage');
+        const confirmedItemInput = document.getElementById('confirmedItem');
+
+        // State
+        let base64Image = null;
+        let mimeType = null;
+
+        /**
+         * Converts a File object to a Base64 encoded string.
+         * @param {File} file - The image file object.
+         * @returns {Promise<{base64: string, mimeType: string}>} - The base64 data and mime type.
+         */
+        const toBase64 = (file) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => {
+                const parts = reader.result.split(',');
+                if (parts.length === 2) {
+                    resolve({
+                        base64: parts[1],
+                        mimeType: file.type
+                    });
+                } else {
+                    reject(new Error("Failed to read file as Base64."));
+                }
+            };
+            reader.onerror = error => reject(error);
+        });
+
+        /**
+         * Retries the fetch request with exponential backoff.
+         * @param {string} url - The API URL.
+         * @param {object} options - The fetch options.
+         * @param {number} attempt - Current retry attempt.
+         * @returns {Promise<Response>}
+         */
+        const backoffFetch = async (url, options, attempt = 1) => {
+            try {
+                const response = await fetch(url, options);
+                if (!response.ok && response.status === 429 && attempt < MAX_RETRIES) {
+                    const delay = Math.pow(2, attempt) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return backoffFetch(url, options, attempt + 1);
+                }
+                return response;
+            } catch (error) {
+                if (attempt < MAX_RETRIES) {
+                    const delay = Math.pow(2, attempt) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return backoffFetch(url, options, attempt + 1);
+                }
+                throw new Error(`API call failed after ${MAX_RETRIES} attempts: ${error.message}`);
+            }
+        };
+
+        /**
+         * Previews the selected image and enables the analyze button.
+         * This function now takes the event to determine which input triggered it.
+         */
+        window.previewImage = async function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                try {
+                    const base64Data = await toBase64(file);
+                    base64Image = base64Data.base64;
+                    mimeType = base64Data.mimeType;
+
+                    imagePreview.innerHTML = `<img src="data:${mimeType};base64,${base64Image}" alt="Uploaded Item Preview" class="object-cover h-full w-full">`;
+                    analyzeButton.disabled = false;
+                    statusMessage.innerHTML = `<p>Image ready for analysis.</p>`;
+                    stepConfirmation.classList.add('hidden');
+                } catch (error) {
+                    statusMessage.innerHTML = `<p class="text-red-600">Error reading file: ${error.message}</p>`;
+                    analyzeButton.disabled = true;
+                }
+            } else {
+                imagePreview.innerHTML = `<p class="text-gray-400 text-sm">Preview will appear here</p>`;
+                analyzeButton.disabled = true;
+                base64Image = null;
+                mimeType = null;
+            }
+        }
+
+        /**
+         * Calls the Gemini API to identify the item in the image.
+         */
+        window.analyzeImage = async function() {
+            if (!base64Image || !mimeType) {
+                statusMessage.innerHTML = `<p class="text-red-600">Please upload or capture an image first.</p>`;
+                return;
+            }
+
+            // Update UI for loading state
+            stepConfirmation.classList.remove('hidden');
+            analyzeButton.disabled = true;
+            analyzeButton.textContent = 'Analyzing...';
+            statusMessage.innerHTML = `<p>Sending image to Gemini for identification. Please wait...</p>`;
+
+            const userQuery = "Identify the main object in this image and describe it clearly and concisely, suitable for an eBay search term. For example, if it's a 'Rolex watch model 12345', return 'Rolex Submariner 12345'. Do not include any extra introductory text, just the item name/description.";
+
+            const payload = {
+                contents: [{
+                    parts: [
+                        { text: userQuery },
+                        {
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: base64Image
+                            }
+                        }
+                    ]
+                }],
+            };
+
+            try {
+                const response = await backoffFetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const identifiedText = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+
+                if (identifiedText) {
+                    const cleanedText = identifiedText.replace(/['"]/g, '').replace(/<[^>]+>/g, '').trim(); // Basic cleanup
+                    confirmedItemInput.value = cleanedText;
+                    statusMessage.innerHTML = `<p>Gemini identified the item as: <strong>"${cleanedText}"</strong>. Please review and correct this name if necessary, then click 'Search eBay'.</p>`;
+                } else {
+                    throw new Error("Gemini could not identify the item. Please try a clearer picture or manually enter the item name.");
+                }
+
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                statusMessage.innerHTML = `<p class="text-red-600">Identification failed: ${error.message}</p>`;
+                confirmedItemInput.value = '';
+            } finally {
+                analyzeButton.disabled = false;
+                analyzeButton.textContent = 'Analyze Image';
+            }
+        }
+
+        /**
+         * Constructs the eBay search URL for sold items and opens it in a new tab.
+         */
+        window.openEbaySearch = function() {
+            const itemQuery = confirmedItemInput.value.trim();
+
+            if (itemQuery.length < 3) {
+                statusMessage.innerHTML = `<p class="text-red-600">Please enter a valid item name (at least 3 characters) before searching.</p>`;
+                return;
+            }
+
+            // Encode the item query for use in a URL
+            const encodedQuery = encodeURIComponent(itemQuery);
+
+            // Construct the eBay search URL with filters for completed and sold items
+            // LH_Complete=1&LH_Sold=1 are the required filters for 'sold' items.
+            const ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodedQuery}&LH_Complete=1&LH_Sold=1`;
+
+            statusMessage.innerHTML = `<p>Searching eBay for sold listings of: <strong>"${itemQuery}"</strong>...</p>`;
+            window.open(ebayUrl, '_blank');
+        }
+
+        // Initialize to ensure the button starts disabled
+        window.onload = function() {
+            analyzeButton.disabled = true;
+        };
+
+    </script>
+</body>
+</html>
