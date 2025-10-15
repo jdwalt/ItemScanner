@@ -121,7 +121,12 @@
     <script type="module">
         // Constants for the Gemini API
         const MODEL_NAME = 'gemini-2.5-flash-preview-05-20';
-        const API_KEY = ""; // Leave as-is. Canvas will inject the key at runtime.
+        // --- START OF REQUIRED CHANGE ---
+        // IMPORTANT: Since you are hosting this on GitHub Pages, you MUST insert your 
+        // personal Gemini API Key here to avoid the 403 error.
+        const API_KEY = AIzaSyC_X9vS17hMKcphWY4m4Y6cSSpfa0Dbd24; 
+        // --- END OF REQUIRED CHANGE ---
+        
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
         const MAX_RETRIES = 5;
 
@@ -229,7 +234,8 @@
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
             if (!SpeechRecognition) {
-                alert("Your browser does not support Web Speech Recognition. Please use Chrome or a modern mobile browser.");
+                // Using a custom message box instead of alert()
+                statusMessage.innerHTML = `<p class="text-red-600">Voice Recognition Not Supported: Please use Chrome or a modern mobile browser.</p>`;
                 return;
             }
 
@@ -299,6 +305,15 @@
          * Calls the Gemini API to identify the item in the image.
          */
         window.analyzeImage = async function() {
+            // Check for API Key presence
+            if (API_KEY === "" || API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
+                statusMessage.innerHTML = `<p class="text-red-600">API Key Error: You must insert your personal Gemini API key into the code to run this app on GitHub Pages.</p>`;
+                analyzeButton.disabled = false;
+                analyzeButton.textContent = 'Analyze Image';
+                stepConfirmation.classList.remove('hidden');
+                return;
+            }
+
             if (!base64Image || !mimeType) {
                 statusMessage.innerHTML = `<p class="text-red-600">Please upload or capture an image first.</p>`;
                 return;
@@ -351,8 +366,7 @@
                     confirmedItemInput.value = cleanedText;
                     statusMessage.innerHTML = `<p>Gemini identified the item as: <strong>"${cleanedText}"</strong>. Please review and correct this name if necessary, then click 'Search eBay'.</p>`;
                 } else {
-                    // This error is now specifically for when the model *couldn't* identify the item, 
-                    // not for connection or API structure errors.
+                    // This error is now specifically for when the model *couldn't* identify the item.
                     throw new Error("Gemini could not identify the item. Please try a clearer picture or manually enter the item name.");
                 }
 
