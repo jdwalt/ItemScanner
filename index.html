@@ -39,7 +39,7 @@
 
         <!-- Step 1: Image Upload & Capture -->
         <div id="step-upload" class="space-y-4">
-            <label class="block text-sm font-medium text-gray-700">1. Upload or Capture Item Picture</label>
+            <label class="block text-sm font-medium text-gray-700">1a. Upload or Capture Item Picture</label>
 
             <!-- Hidden Camera Input (Triggers camera on mobile devices) -->
             <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="previewImage(event)" class="hidden">
@@ -54,7 +54,7 @@
                 transition duration-150"
                 onchange="previewImage(event)">
 
-            <!-- New Camera Button -->
+            <!-- Camera Button -->
             <button id="cameraButton" onclick="document.getElementById('cameraInput').click()" class="w-full py-3 px-4 bg-blue-500 text-white font-bold rounded-lg shadow-md hover:bg-blue-600 transition duration-150 flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
                   <path fill-rule="evenodd" d="M4 5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1.586a1 1 0 0 1-.707-.293l-1.121-1.121A.993.993 0 0 0 10 3H7a1 1 0 0 0-.707.293L5.293 4.293A1 1 1 4.586 5H4ZM12 7a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" clip-rule="evenodd" />
@@ -70,16 +70,45 @@
                 Analyze Image
             </button>
         </div>
+        
+        <!-- Divider for Alternate Input -->
+        <div class="flex items-center space-x-2 py-4">
+            <div class="flex-grow border-t border-gray-300"></div>
+            <span class="text-sm text-gray-500 font-medium">OR</span>
+            <div class="flex-grow border-t border-gray-300"></div>
+        </div>
+
+        <!-- Step 1b: Voice-to-Text Input -->
+        <div id="step-voice" class="space-y-4">
+            <label class="block text-sm font-medium text-gray-700">1b. Voice-to-Text Description</label>
+
+            <button id="voiceInputButton" onclick="startVoiceInput()" class="w-full py-3 px-4 bg-purple-600 text-white font-bold rounded-lg shadow-md hover:bg-purple-700 transition duration-150 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
+                  <path d="M10 8c1.332 0 2.593.585 3.475 1.637l1.096-1.096A6.98 6.98 0 0 0 10 2c-1.83 0-3.535.733-4.787 1.944l1.104 1.104A4.99 4.99 0 0 1 10 4.5a5.5 5.5 0 0 1 5.5 5.5c0 1.332-.585 2.593-1.637 3.475l1.096 1.096A6.98 6.98 0 0 0 17.5 10c0-3.866-3.134-7-7-7v2.5a4.5 4.5 0 0 0-4.5 4.5c0 1.332.585 2.593 1.637 3.475l-1.096 1.096A6.98 6.98 0 0 0 2.5 10c0-3.866 3.134-7 7-7v2.5a4.5 4.5 0 0 0-4.5 4.5c0 1.332.585 2.593 1.637 3.475l-1.096 1.096A6.98 6.98 0 0 0 10 17.5c1.83 0 3.535-.733 4.787-1.944l-1.104-1.104A4.99 4.99 0 0 1 10 15.5c-1.332 0-2.593-.585-3.475-1.637l-1.096 1.096A6.98 6.98 0 0 0 2.5 10c0-3.866 3.134-7 7-7v2.5a4.5 4.5 0 0 0-4.5 4.5Z" />
+                </svg>
+                Tap to Speak Item Name
+            </button>
+            
+            <div class="space-y-3">
+                <label for="voiceTranscription" class="block text-sm font-medium text-gray-700">Transcribed Text:</label>
+                <input type="text" id="voiceTranscription" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500" placeholder="Transcription will appear here">
+            </div>
+            
+            <button id="voiceUseButton" onclick="useVoiceTranscription()" disabled class="w-full py-3 px-4 bg-green-500 text-white font-bold rounded-lg shadow-md hover:bg-green-600 transition duration-150 disabled:opacity-50">
+                Use Text for Search
+            </button>
+        </div>
+
 
         <!-- Step 2 & 3: Identification & Confirmation -->
         <div id="step-confirmation" class="hidden space-y-4 pt-4 border-t border-gray-200">
             <label class="block text-sm font-medium text-gray-700">2. Confirm Item Identification</label>
             <div id="statusMessage" class="message-box p-3 bg-soft-red text-gray-800 rounded-lg border border-light-red max-h-32 overflow-y-auto">
-                <p>Waiting for image...</p>
+                <p>Waiting for input...</p>
             </div>
 
             <div class="space-y-3">
-                <label for="confirmedItem" class="block text-sm font-medium text-gray-700">Identified Item Name:</label>
+                <label for="confirmedItem" class="block text-sm font-medium text-gray-700">Final Search Term:</label>
                 <input type="text" id="confirmedItem" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-red focus:border-primary-red" placeholder="e.g., Vintage Rolex Submariner 1680">
             </div>
 
@@ -97,14 +126,18 @@
         const MAX_RETRIES = 5;
 
         // UI Elements
-        const fileUploadInput = document.getElementById('fileUploadInput'); // Renamed
-        const cameraInput = document.getElementById('cameraInput'); // New
+        const cameraInput = document.getElementById('cameraInput');
+        const fileUploadInput = document.getElementById('fileUploadInput');
         const imagePreview = document.getElementById('imagePreview');
         const analyzeButton = document.getElementById('analyzeButton');
-        const stepUpload = document.getElementById('step-upload');
         const stepConfirmation = document.getElementById('step-confirmation');
         const statusMessage = document.getElementById('statusMessage');
         const confirmedItemInput = document.getElementById('confirmedItem');
+        
+        // New Voice UI Elements
+        const voiceInputButton = document.getElementById('voiceInputButton');
+        const voiceTranscriptionInput = document.getElementById('voiceTranscription');
+        const voiceUseButton = document.getElementById('voiceUseButton');
 
         // State
         let base64Image = null;
@@ -160,7 +193,6 @@
 
         /**
          * Previews the selected image and enables the analyze button.
-         * This function now takes the event to determine which input triggered it.
          */
         window.previewImage = async function(event) {
             const file = event.target.files[0];
@@ -172,8 +204,11 @@
 
                     imagePreview.innerHTML = `<img src="data:${mimeType};base64,${base64Image}" alt="Uploaded Item Preview" class="object-cover h-full w-full">`;
                     analyzeButton.disabled = false;
-                    statusMessage.innerHTML = `<p>Image ready for analysis.</p>`;
+                    
+                    // Reset voice/confirmation state
+                    statusMessage.innerHTML = `<p>Image ready for analysis. Click "Analyze Image".</p>`;
                     stepConfirmation.classList.add('hidden');
+
                 } catch (error) {
                     statusMessage.innerHTML = `<p class="text-red-600">Error reading file: ${error.message}</p>`;
                     analyzeButton.disabled = true;
@@ -185,6 +220,80 @@
                 mimeType = null;
             }
         }
+
+        /**
+         * Initializes and starts the Web Speech API for voice input.
+         */
+        window.startVoiceInput = function() {
+            // Check for browser support
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+            if (!SpeechRecognition) {
+                alert("Your browser does not support Web Speech Recognition. Please use Chrome or a modern mobile browser.");
+                return;
+            }
+
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false; // Stop after a single phrase
+            recognition.lang = 'en-US'; 
+            recognition.interimResults = false; // Only return the final result
+            recognition.maxAlternatives = 1;
+
+            voiceInputButton.disabled = true;
+            voiceInputButton.textContent = 'Listening... Speak Now!';
+            voiceTranscriptionInput.placeholder = 'Listening...';
+            voiceUseButton.disabled = true;
+            
+            // Clear previous transcription
+            voiceTranscriptionInput.value = '';
+            stepConfirmation.classList.add('hidden');
+
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                voiceTranscriptionInput.value = transcript;
+                voiceTranscriptionInput.placeholder = transcript;
+
+                if (transcript.length > 2) {
+                    voiceUseButton.disabled = false;
+                    statusMessage.innerHTML = `<p>Voice transcription complete. Tap "Use Text for Search" to proceed.</p>`;
+                } else {
+                    statusMessage.innerHTML = `<p class="text-red-600">Could not detect a clear item name. Try again.</p>`;
+                }
+            };
+
+            recognition.onend = () => {
+                voiceInputButton.disabled = false;
+                voiceInputButton.textContent = 'Tap to Speak Item Name';
+                if (!voiceTranscriptionInput.value) {
+                    voiceTranscriptionInput.placeholder = 'Tap to Speak Item Name';
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                statusMessage.innerHTML = `<p class="text-red-600">Voice recognition error: ${event.error}.</p>`;
+            };
+
+            recognition.start();
+        }
+
+        /**
+         * Copies voice transcription to the main search field and enables the final search button.
+         */
+        window.useVoiceTranscription = function() {
+            const voiceText = voiceTranscriptionInput.value.trim();
+
+            if (voiceText.length < 3) {
+                statusMessage.innerHTML = `<p class="text-red-600">Please provide a longer description.</p>`;
+                return;
+            }
+
+            confirmedItemInput.value = voiceText;
+            stepConfirmation.classList.remove('hidden');
+            statusMessage.innerHTML = `<p>Using voice input: <strong>"${voiceText}"</strong>. Review the term and click 'Search eBay'.</p>`;
+        }
+
 
         /**
          * Calls the Gemini API to identify the item in the image.
@@ -224,7 +333,7 @@
                     body: JSON.stringify(payload)
                 });
                 
-                // --- FIX: Check for non-200 status codes (like 400, 403, 500) ---
+                // --- Check for non-200 status codes (like 400, 403, 500) ---
                 if (!response.ok) {
                     const errorDetails = await response.text();
                     console.error("API Response Error Body:", errorDetails);
@@ -282,6 +391,7 @@
         // Initialize to ensure the button starts disabled
         window.onload = function() {
             analyzeButton.disabled = true;
+            voiceUseButton.disabled = true;
         };
 
     </script>
