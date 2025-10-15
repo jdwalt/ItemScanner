@@ -6,11 +6,38 @@
     <title>eBay Sold Item Finder</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QuaggaJS Library for Barcode Scanning -->
+    <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
     <style>
         /* Custom scrollbar for message area */
         .message-box::-webkit-scrollbar { width: 6px; }
         .message-box::-webkit-scrollbar-thumb { background-color: #fca5a5; border-radius: 3px; }
         .message-box::-webkit-scrollbar-track { background-color: #fee2e2; }
+
+        /* Custom CSS for the QuaggaJS scanner view */
+        #interactive.viewport {
+            position: relative;
+            height: 256px; /* 64 * 4 = 256px */
+            width: 100%;
+            overflow: hidden;
+        }
+        #interactive.viewport canvas, #interactive.viewport video {
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        
+        /* Barcode scanning line animation */
+        @keyframes scan-line {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .animate-scan-line {
+            height: 2px;
+            background-color: #ef4444; /* primary-red */
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+            animation: scan-line 2s ease-in-out infinite alternate;
+        }
     </style>
     <script>
         tailwind.config = {
@@ -34,12 +61,12 @@
     <div id="app-container" class="w-full max-w-lg bg-white shadow-xl rounded-xl p-6 md:p-8 space-y-6">
 
         <h1 class="text-3xl font-extrabold text-gray-800 text-center border-b pb-4">
-            <span class="text-primary-red">eBay</span> Image Identifier
+            <span class="text-primary-red">eBay</span> Item Finder
         </h1>
 
         <!-- Step 1: Image Upload & Capture -->
         <div id="step-upload" class="space-y-4">
-            <label class="block text-sm font-medium text-gray-700">1a. Upload or Capture Item Picture</label>
+            <label class="block text-sm font-medium text-gray-700">1a. Upload, Drag & Drop, or Capture Item Picture</label>
 
             <!-- Hidden Camera Input (Triggers camera on mobile devices) -->
             <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="previewImage(event)" class="hidden">
@@ -63,9 +90,21 @@
             </button>
 
 
-            <div id="imagePreview" class="h-40 w-full bg-gray-100 rounded-lg flex items-center justify-center border border-dashed border-gray-300 overflow-hidden">
-                <p class="text-gray-400 text-sm">Preview will appear here</p>
+            <!-- Drag and Drop Image Preview Area -->
+            <div id="imagePreview" 
+                 class="h-40 w-full bg-gray-100 rounded-lg flex items-center justify-center 
+                        border-2 border-dashed border-gray-300 p-4 transition-all duration-200"
+                 ondragover="handleDragOver(event)"
+                 ondragleave="handleDragLeave(event)"
+                 ondrop="handleDrop(event)">
+                <p class="text-gray-500 text-center text-sm font-semibold">
+                    Drag and Drop Image Here
+                    <br>
+                    <span class="text-xs text-gray-400">or use the input above.</span>
+                </p>
             </div>
+            <!-- End Drag and Drop Area -->
+            
             <button id="analyzeButton" onclick="analyzeImage()" disabled class="w-full py-3 px-4 bg-primary-red text-white font-bold rounded-lg shadow-md hover:bg-red-600 transition duration-150 disabled:opacity-50">
                 Analyze Image
             </button>
@@ -99,6 +138,34 @@
             </button>
         </div>
 
+        <!-- Divider for Barcode Input -->
+        <div class="flex items-center space-x-2 py-4">
+            <div class="flex-grow border-t border-gray-300"></div>
+            <span class="text-sm text-gray-500 font-medium">OR</span>
+            <div class="flex-grow border-t border-gray-300"></div>
+        </div>
+        
+        <!-- Step 1c: Barcode Scanner -->
+        <div id="step-barcode" class="space-y-4">
+            <label class="block text-sm font-medium text-gray-700">1c. Scan Barcode (UPC/ISBN)</label>
+
+            <button id="scanButton" onclick="startBarcodeScanner()" class="w-full py-3 px-4 bg-yellow-600 text-white font-bold rounded-lg shadow-md hover:bg-yellow-700 transition duration-150 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 mr-2">
+                  <path fill-rule="evenodd" d="M3 3.75C3 3.336 3.336 3 3.75 3h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5c0-.414.336-.75.75-.75ZM3 20.25c0-.414.336-.75.75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5Z" clip-rule="evenodd" />
+                  <path d="M6 6.75a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 .75.75v10.5a.75.75 0 0 1-.75.75H6.75a.75.75 0 0 1-.75-.75V6.75Z" />
+                  <path fill-rule="evenodd" d="M20.25 3.75a.75.75 0 0 0-1.5 0v1.5c0 .414.336.75.75.75h1.5a.75.75 0 0 0 0-1.5h-1.5v-1.5ZM21.75 20.25a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0-.75.75v1.5a.75.75 0 0 0 1.5 0v-1.5h1.5Z" clip-rule="evenodd" />
+                </svg>
+                Scan Item Barcode
+            </button>
+            
+            <div id="scanner-view" class="hidden relative rounded-lg overflow-hidden bg-gray-900 border-2 border-dashed border-yellow-400">
+                <div id="interactive" class="viewport w-full h-64"></div>
+                <button onclick="stopBarcodeScanner()" class="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full text-xs font-bold shadow-lg z-10 hover:bg-red-700">Stop Scan</button>
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div class="w-full h-px bg-red-500 border-b border-t border-red-500 opacity-75 animate-scan-line"></div>
+                </div>
+            </div>
+        </div>
 
         <!-- Step 2 & 3: Identification & Confirmation -->
         <div id="step-confirmation" class="hidden space-y-4 pt-4 border-t border-gray-200">
@@ -121,11 +188,9 @@
     <script type="module">
         // Constants for the Gemini API
         const MODEL_NAME = 'gemini-2.5-flash-preview-05-20';
-        // --- START OF REQUIRED CHANGE ---
         // IMPORTANT: Since you are hosting this on GitHub Pages, you MUST insert your 
-        // personal Gemini API Key here to avoid the 403 error.
-        const API_KEY = "AIzaSyC_X9vS17hMKcphWY4m4Y6cSSpfa0Dbd24"; 
-        // --- END OF REQUIRED CHANGE ---
+        // personal Gemini API Key here. The key must be inside the quotation marks ("").
+        const API_KEY = "YOUR_GEMINI_API_KEY_HERE"; 
         
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
         const MAX_RETRIES = 5;
@@ -139,14 +204,19 @@
         const statusMessage = document.getElementById('statusMessage');
         const confirmedItemInput = document.getElementById('confirmedItem');
         
-        // New Voice UI Elements
+        // Voice UI Elements
         const voiceInputButton = document.getElementById('voiceInputButton');
         const voiceTranscriptionInput = document.getElementById('voiceTranscription');
         const voiceUseButton = document.getElementById('voiceUseButton');
+        
+        // Barcode UI Elements
+        const scannerView = document.getElementById('scanner-view');
+        const scanButton = document.getElementById('scanButton');
 
         // State
         let base64Image = null;
         let mimeType = null;
+        let scannerRunning = false;
 
         /**
          * Converts a File object to a Base64 encoded string.
@@ -197,17 +267,26 @@
         };
 
         /**
-         * Previews the selected image and enables the analyze button.
+         * Handles processing the input file, whether from the file input, camera, or drag/drop.
+         * Accepts an event (from input change) or a FileList (from drop).
          */
-        window.previewImage = async function(event) {
-            const file = event.target.files[0];
+        window.previewImage = async function(source) {
+            let file = null;
+
+            if (source instanceof Event && source.target.files) {
+                file = source.target.files[0];
+            } else if (source instanceof FileList) {
+                file = source[0]; // Take the first dropped file
+            }
+
             if (file) {
                 try {
                     const base64Data = await toBase64(file);
                     base64Image = base64Data.base64;
                     mimeType = base64Data.mimeType;
 
-                    imagePreview.innerHTML = `<img src="data:${mimeType};base64,${base64Image}" alt="Uploaded Item Preview" class="object-cover h-full w-full">`;
+                    // Display the image and hide the drag/drop instruction text
+                    imagePreview.innerHTML = `<img src="data:${mimeType};base64,${base64Image}" alt="Uploaded Item Preview" class="object-contain h-full w-full">`;
                     analyzeButton.disabled = false;
                     
                     // Reset voice/confirmation state
@@ -219,12 +298,45 @@
                     analyzeButton.disabled = true;
                 }
             } else {
-                imagePreview.innerHTML = `<p class="text-gray-400 text-sm">Preview will appear here</p>`;
+                // Reset to drag/drop prompt
+                imagePreview.innerHTML = `
+                    <p class="text-gray-500 text-center text-sm font-semibold">
+                        Drag and Drop Image Here
+                        <br>
+                        <span class="text-xs text-gray-400">or use the input above.</span>
+                    </p>
+                `;
                 analyzeButton.disabled = true;
                 base64Image = null;
                 mimeType = null;
             }
         }
+        
+        // --- Drag and Drop Handlers ---
+
+        window.handleDragOver = function(event) {
+            event.preventDefault(); // Essential to allow a drop
+            imagePreview.classList.add('border-primary-red', 'bg-soft-red');
+            imagePreview.classList.remove('border-gray-300', 'bg-gray-100');
+        }
+
+        window.handleDragLeave = function(event) {
+            imagePreview.classList.remove('border-primary-red', 'bg-soft-red');
+            imagePreview.classList.add('border-gray-300', 'bg-gray-100');
+        }
+
+        window.handleDrop = function(event) {
+            event.preventDefault();
+            imagePreview.classList.remove('border-primary-red', 'bg-soft-red');
+            imagePreview.classList.add('border-gray-300', 'bg-gray-100');
+
+            if (event.dataTransfer.files.length) {
+                // Pass the FileList to the updated previewImage function
+                previewImage(event.dataTransfer.files);
+            }
+        }
+        // --- End Drag and Drop Handlers ---
+
 
         /**
          * Initializes and starts the Web Speech API for voice input.
@@ -301,6 +413,68 @@
         }
 
 
+        // --- Barcode Scanning Functions ---
+
+        window.startBarcodeScanner = function() {
+            if (scannerRunning) return;
+
+            scannerView.classList.remove('hidden');
+            scanButton.disabled = true;
+            statusMessage.innerHTML = `<p>Starting barcode scanner... Please ensure the camera is enabled.</p>`;
+
+            Quagga.init({
+                inputStream : {
+                    name : "Live",
+                    type : "LiveStream",
+                    target: document.querySelector('#interactive'),
+                    constraints: {
+                        facingMode: "environment" // Use rear camera on mobile
+                    }
+                },
+                decoder: {
+                    readers : ["ean_reader", "upc_reader", "code_39_reader"] // Common barcode types
+                }
+            }, function(err) {
+                if (err) {
+                    console.error("Quagga initialization error:", err);
+                    scannerRunning = false;
+                    scanButton.disabled = false;
+                    scannerView.classList.add('hidden');
+                    statusMessage.innerHTML = `<p class="text-red-600">Scanner failed to start. Check browser permissions: ${err.name || err.message}</p>`;
+                    return
+                }
+                Quagga.start();
+                scannerRunning = true;
+                statusMessage.innerHTML = `<p>Scanner started! Point your camera at a UPC or ISBN barcode.</p>`;
+            });
+
+            Quagga.onDetected(function(result) {
+                if (result.codeResult) {
+                    const code = result.codeResult.code;
+                    
+                    // Stop the scanner immediately upon successful detection
+                    stopBarcodeScanner(); 
+
+                    confirmedItemInput.value = code;
+                    stepConfirmation.classList.remove('hidden');
+                    statusMessage.innerHTML = `<p class="text-green-600">Barcode detected: <strong>${code}</strong>. Please review the term and click 'Search eBay'.</p>`;
+                }
+            });
+        }
+
+        window.stopBarcodeScanner = function() {
+            if (scannerRunning) {
+                Quagga.stop();
+                scannerRunning = false;
+                scannerView.classList.add('hidden');
+                scanButton.disabled = false;
+                statusMessage.innerHTML = `<p>Scanner stopped. Ready for next input.</p>`;
+            }
+        }
+
+        // --- End Barcode Scanning Functions ---
+
+
         /**
          * Calls the Gemini API to identify the item in the image.
          */
@@ -318,6 +492,9 @@
                 statusMessage.innerHTML = `<p class="text-red-600">Please upload or capture an image first.</p>`;
                 return;
             }
+            
+            // Ensure scanner is stopped before analyzing image
+            stopBarcodeScanner();
 
             // Update UI for loading state
             stepConfirmation.classList.remove('hidden');
@@ -390,6 +567,9 @@
                 statusMessage.innerHTML = `<p class="text-red-600">Please enter a valid item name (at least 3 characters) before searching.</p>`;
                 return;
             }
+            
+            // Ensure scanner is stopped before opening a new window
+            stopBarcodeScanner();
 
             // Encode the item query for use in a URL
             const encodedQuery = encodeURIComponent(itemQuery);
@@ -411,4 +591,3 @@
     </script>
 </body>
 </html>
-
