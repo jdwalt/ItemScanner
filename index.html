@@ -6,42 +6,29 @@
     <title>eBay Sold Item Finder</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- QuaggaJS Library for Barcode Scanning -->
-    <script src="https://unpkg.com/quagga@0.12.1/dist/quagga.min.js"></script>
     <style>
         /* Custom scrollbar for message area */
         .message-box::-webkit-scrollbar { width: 6px; }
         .message-box::-webkit-scrollbar-thumb { background-color: #fca5a5; border-radius: 3px; }
         .message-box::-webkit-scrollbar-track { background-color: #fee2e2; }
 
-        /* Custom CSS for the QuaggaJS scanner view */
+        /* Custom CSS for the QuaggaJS scanner view (removed but keeping structure clean) */
         #interactive.viewport {
             position: relative;
             height: 256px;
             width: 100%;
             overflow: hidden;
         }
-        #interactive.viewport canvas, #interactive.viewport video {
-            position: absolute;
-            left: 0;
-            top: 0;
-        }
         
-        /* Barcode scanning line animation */
-        @keyframes scan-line {
-            0% { transform: translateY(-100%); }
-            100% { transform: translateY(100%); }
-        }
-        .animate-scan-line {
-            height: 2px;
-            background-color: #ef4444; /* primary-red */
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
-            animation: scan-line 2s ease-in-out infinite alternate;
-        }
         /* Modal Backdrop */
         .modal-backdrop {
             background-color: rgba(0, 0, 0, 0.6);
         }
+        
+        /* Message Box Color Classes */
+        .msg-red { background-color: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+        .msg-green { background-color: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+
     </style>
     <script>
         tailwind.config = {
@@ -62,21 +49,49 @@
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4 font-sans">
 
-    <!-- API Key Input Modal -->
+    <!-- API Key Input/Settings Modal -->
     <div id="apiModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop transition-opacity duration-300">
-        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm space-y-4">
-            <h2 class="text-xl font-bold text-gray-800">Enter Gemini API Key</h2>
-            <p class="text-sm text-gray-600">Your key is stored only on this device (in localStorage) and is required for image analysis.</p>
-            <input type="password" id="apiKeyInput" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-red focus:border-primary-red" placeholder="Paste your API Key here">
-            <button onclick="saveAndCloseApiModal()" class="w-full py-3 px-4 bg-primary-red text-white font-bold rounded-lg shadow-md hover:bg-red-600 transition duration-150">
-                Save Key
-            </button>
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm space-y-6">
+            <h2 class="text-xl font-bold text-gray-800 border-b pb-3">Settings & API Key</h2>
+            
+            <!-- API Key Input -->
+            <div class="space-y-2">
+                <h3 class="font-semibold text-gray-700">Gemini API Key</h3>
+                <p class="text-sm text-gray-600">Your key is stored only on this device (localStorage).</p>
+                <input type="password" id="apiKeyInput" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-red focus:border-primary-red" placeholder="Paste your API Key here">
+                <button onclick="saveAndCloseApiModal()" class="w-full py-3 px-4 bg-primary-red text-white font-bold rounded-lg shadow-md hover:bg-red-600 transition duration-150">
+                    Save Key
+                </button>
+            </div>
+            
+            <!-- UI Settings -->
+            <div class="space-y-3 border-t pt-4">
+                <h3 class="font-semibold text-gray-700">Notification Settings</h3>
+                
+                <label class="flex items-center space-x-2">
+                    <input type="checkbox" id="msgVisibleToggle" class="rounded text-primary-red" onchange="updateMessageVisibility()">
+                    <span class="text-sm text-gray-700">Show success/error messages</span>
+                </label>
+                
+                <div id="msgPositionRadios" class="space-y-2 pl-4 text-sm text-gray-600">
+                    <p class="font-medium text-gray-700">Message Position:</p>
+                    <label class="flex items-center space-x-2">
+                        <input type="radio" name="msgPosition" value="top" class="text-primary-red" checked>
+                        <span>Top of Page</span>
+                    </label>
+                    <label class="flex items-center space-x-2">
+                        <input type="radio" name="msgPosition" value="bottom" class="text-primary-red">
+                        <span>Above Search Box</span>
+                    </label>
+                </div>
+            </div>
+
             <button onclick="document.getElementById('apiModal').classList.add('hidden')" class="w-full py-2 text-gray-600 hover:text-gray-800 transition">
-                Cancel
+                Close Settings
             </button>
         </div>
     </div>
-    <!-- End API Key Input Modal -->
+    <!-- End API Key Input/Settings Modal -->
 
     <div id="app-container" class="w-full max-w-lg bg-white shadow-xl rounded-xl p-6 md:p-8 space-y-6 relative">
         
@@ -92,43 +107,14 @@
             <span class="text-primary-red">eBay</span> Item Finder
         </h1>
         
-        <!-- Result and Error Display Area -->
-        <div id="results-area" class="space-y-3">
-            <div id="resultMessage" class="message-box p-3 bg-soft-red text-gray-800 rounded-lg border border-light-red max-h-32 overflow-y-auto">
-                <p>Ready. Use an input method below to begin.</p>
-            </div>
-            
-            <!-- Expandable Error Container -->
-            <div id="errorContainer" class="hidden">
-                <button id="errorToggle" onclick="toggleErrorDetails()" class="w-full py-2 px-3 bg-red-500 text-white font-semibold rounded-lg flex justify-between items-center hover:bg-red-600 transition">
-                    <span id="errorSummary">Error Occurred</span>
-                    <svg id="errorIcon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 transition-transform duration-300">
-                        <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-                    </svg>
-                </button>
-                <div id="errorDetails" class="hidden p-3 mt-1 bg-red-100 border border-red-300 rounded-lg text-sm text-red-800 break-all">
-                    <!-- Detailed error text goes here -->
-                </div>
-            </div>
-            <!-- End Expandable Error Container -->
-
-            <div class="space-y-3">
-                <label for="confirmedItem" class="block text-sm font-bold text-gray-700">Search Term / Item Identified:</label>
-                <input type="text" id="confirmedItem" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-red focus:border-primary-red" placeholder="Search query or item description">
-            </div>
-        </div>
-
-        <!-- Final Search Button (Always Visible) -->
-        <button onclick="openEbaySearch()" class="w-full py-3 px-4 bg-green-500 text-white font-bold rounded-lg shadow-md hover:bg-green-600 transition duration-150">
-            Search eBay SOLD Listings
-        </button>
-
-
-        <div class="space-y-4 pt-4 border-t border-gray-200">
-            
-            <!-- Image Input Section -->
+        <!-- Top Message Area Placeholder -->
+        <div id="topMessageArea"></div>
+        
+        <!-- Image Input Section -->
+        <div class="space-y-4">
+            <!-- Input Buttons -->
             <div class="flex space-x-2">
-                <!-- File Upload Button (repurposed from input) -->
+                <!-- File Upload Button -->
                 <button onclick="document.getElementById('fileUploadInput').click()" class="w-1/2 py-3 px-4 bg-light-red text-white font-bold rounded-lg shadow-md hover:bg-primary-red transition duration-150 flex items-center justify-center">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-1">
                       <path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.19L7.3 9.44a.75.75 0 1 0-1.06 1.06l3.25 3.25a.75.75 0 0 0 1.06 0l3.25-3.25a.75.75 0 1 0-1.06-1.06l-1.94 1.95V2.75Z" />
@@ -148,8 +134,8 @@
             
             <!-- Hidden Input Fields -->
             <p id="fileNameDisplay" class="text-sm text-gray-500 truncate h-5">No file selected.</p>
-            <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="previewImage(event)" class="hidden">
-            <input type="file" id="fileUploadInput" accept="image/*" class="hidden" onchange="previewImage(event)">
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="previewImage(event, 'item')" class="hidden">
+            <input type="file" id="fileUploadInput" accept="image/*" class="hidden" onchange="previewImage(event, 'item')">
 
             <!-- Drag and Drop Image Preview Area -->
             <div id="imagePreview" 
@@ -166,7 +152,7 @@
             </div>
             <!-- End Drag and Drop Area -->
             
-            <button id="analyzeButton" onclick="analyzeImage()" disabled class="w-full py-3 px-4 bg-primary-red text-white font-bold rounded-lg shadow-md hover:bg-red-600 transition duration-150 disabled:opacity-50">
+            <button id="analyzeButton" onclick="analyzeImage('item')" disabled class="w-full py-3 px-4 bg-primary-red text-white font-bold rounded-lg shadow-md hover:bg-red-600 transition duration-150 disabled:opacity-50">
                 Analyze Image
             </button>
         </div>
@@ -184,36 +170,43 @@
             <!-- Voice Input Button -->
             <button id="voiceInputButton" onclick="startVoiceInput()" class="w-full py-3 px-4 bg-purple-600 text-white font-bold rounded-lg shadow-md hover:bg-purple-700 transition duration-150 flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
-                  <path d="M10 8c1.332 0 2.593.585 3.475 1.637l1.096-1.096A6.98 6.98 0 0 0 10 2c-1.83 0-3.535.733-4.787 1.944l1.104 1.104A4.99 4.99 0 0 1 10 4.5a5.5 5.5 0 0 1 5.5 5.5c0 1.332-.585 2.593-1.637 3.475l1.096 1.096A6.98 6.98 0 0 0 17.5 10c0-3.866-3.134-7-7-7v2.5a4.5 4.5 0 0 0-4.5 4.5c0 1.332.585 2.593 1.637 3.475l-1.096 1.096A6.98 6.98 0 0 0 10 17.5c1.83 0 3.535-.733 4.787-1.944l-1.104-1.104A4.99 4.99 0 0 1 10 15.5c-1.332 0-2.593-.585-3.475-1.637l-1.096 1.096A6.98 6.98 0 0 0 2.5 10c0-3.866 3.134-7 7-7v2.5a4.5 4.5 0 0 0-4.5 4.5Z" />
+                  <path d="M10 8c1.332 0 2.593.585 3.475 1.637l1.096-1.096A6.98 6.98 0 0 0 10 2c-1.83 0-3.535.733-4.787 1.944l1.104 1.104A4.99 4.99 0 0 1 10 4.5a5.5 5.5 0 0 1 5.5 5.5c0 1.332-.585 2.593-1.637 3.475l1.096 1.096A6.98 6.98 0 0 0 17.5 10c0-3.866-3.134-7-7-7v2.5a4.5 4.5 0 0 0-4.5 4.5c0 1.332.585 2.593 1.637 3.475l-1.096 1.096A6.98 6.98 0 0 0 2.5 10c0-3.866 3.134-7 7-7v2.5a4.5 4.5 0 0 0-4.5 4.5Z" />
                 </svg>
                 Tap to Speak Item Name
             </button>
             
-            <!-- Barcode Scanner -->
-            <button id="scanButton" onclick="startBarcodeScanner()" class="w-full py-3 px-4 bg-orange-600 text-white font-bold rounded-lg shadow-md hover:bg-orange-700 transition duration-150 flex items-center justify-center">
+            <!-- Barcode Scanner (Rollback: Now uses Camera Capture + Gemini Vision) -->
+            <input type="file" id="barcodeCaptureInput" accept="image/*" capture="environment" onchange="previewImage(event, 'barcode')" class="hidden">
+            <button id="scanButton" onclick="document.getElementById('barcodeCaptureInput').click()" class="w-full py-3 px-4 bg-orange-600 text-white font-bold rounded-lg shadow-md hover:bg-orange-700 transition duration-150 flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 mr-2">
                   <path fill-rule="evenodd" d="M3 3.75C3 3.336 3.336 3 3.75 3h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5c0-.414.336-.75.75-.75ZM3 20.25c0-.414.336-.75.75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5v1.5a.75.75 0 0 1-1.5 0v-1.5Z" clip-rule="evenodd" />
                   <path d="M6 6.75a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 .75.75v10.5a.75.75 0 0 1-.75.75H6.75a.75.75 0 0 1-.75-.75V6.75Z" />
                   <path fill-rule="evenodd" d="M20.25 3.75a.75.75 0 0 0-1.5 0v1.5c0 .414.336.75.75.75h1.5a.75.75 0 0 0 0-1.5h-1.5v-1.5ZM21.75 20.25a.75.75 0 0 0 0-1.5h-1.5a.75.75 0 0 0-.75.75v1.5a.75.75 0 0 0 1.5 0v-1.5h1.5Z" clip-rule="evenodd" />
                 </svg>
-                Scan Item Barcode
+                Scan Barcode (Camera)
             </button>
             
-            <div id="scanner-view" class="hidden relative rounded-lg overflow-hidden bg-gray-900 border-2 border-dashed border-orange-400">
-                <div id="interactive" class="viewport w-full h-64"></div>
-                <button onclick="stopBarcodeScanner()" class="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full text-xs font-bold shadow-lg z-10 hover:bg-red-700">Stop Scan</button>
-                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div class="w-full h-px bg-red-500 border-b border-t border-red-500 opacity-75 animate-scan-line"></div>
-                </div>
-            </div>
         </div>
 
+        <!-- Bottom Message Area Placeholder -->
+        <div id="bottomMessageArea"></div>
+
+        <!-- Search Input and Button at the bottom -->
+        <div class="space-y-4 pt-4 border-t border-gray-200">
+            <input type="text" id="confirmedItem" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-red focus:border-primary-red" placeholder="Search query or item description">
+            
+            <button onclick="openEbaySearch()" class="w-full py-3 px-4 bg-green-500 text-white font-bold rounded-lg shadow-md hover:bg-green-600 transition duration-150">
+                Search eBay SOLD Listings
+            </button>
+        </div>
     </div>
 
     <script type="module">
         // Constants for the Gemini API
         const MODEL_NAME = 'gemini-2.5-flash-preview-05-20';
         const MAX_RETRIES = 5;
+        const MESSAGE_KEY = 'msgVisibility';
+        const POSITION_KEY = 'msgPosition';
 
         // UI Elements
         const cameraInput = document.getElementById('cameraInput');
@@ -224,85 +217,100 @@
         const confirmedItemInput = document.getElementById('confirmedItem');
         
         // Message/Error UI Elements
-        const resultMessage = document.getElementById('resultMessage');
+        const topMessageArea = document.getElementById('topMessageArea');
+        const bottomMessageArea = document.getElementById('bottomMessageArea');
+        let currentMessageElement = null; // Holds the currently displayed message box
+        
         const errorContainer = document.getElementById('errorContainer');
         const errorSummary = document.getElementById('errorSummary');
         const errorDetails = document.getElementById('errorDetails');
         const errorIcon = document.getElementById('errorIcon');
         
-        // Barcode UI Elements
-        const scannerView = document.getElementById('scanner-view');
-        const scanButton = document.getElementById('scanButton');
-
+        // Modal UI Elements
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const msgVisibleToggle = document.getElementById('msgVisibleToggle');
+        const msgPositionRadios = document.getElementById('msgPositionRadios');
+        
         // State
         let base64Image = null;
         let mimeType = null;
-        let scannerRunning = false;
+        let analysisMode = 'item'; // 'item' or 'barcode'
 
-        // --- API Key Management (Security Feature) ---
+        // --- Message & Error Handling Utilities ---
 
         /**
-         * Retrieves the API key from local storage.
-         * @returns {string | null} The API key or null if not found.
+         * Renders the message box based on current settings and content.
+         * @param {string} content HTML content for the message.
+         * @param {string} type 'green' or 'red' for styling.
+         * @param {boolean} dismissible Adds the "tap to hide" prompt.
          */
-        function getApiKey() {
-            return localStorage.getItem('geminiApiKey');
+        function displayMessage(content, type = 'red', dismissible = false) {
+            const isVisible = localStorage.getItem(MESSAGE_KEY) === 'true';
+            if (!isVisible) return;
+            
+            const position = localStorage.getItem(POSITION_KEY) || 'top';
+            const targetArea = position === 'top' ? topMessageArea : bottomMessageArea;
+            
+            // Clear the previous message from all possible areas
+            topMessageArea.innerHTML = '';
+            bottomMessageArea.innerHTML = '';
+
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message-box p-3 rounded-lg border my-2 transition-opacity duration-300 msg-${type}`;
+            msgDiv.innerHTML = content;
+            
+            if (dismissible) {
+                const dismissText = document.createElement('p');
+                dismissText.className = 'text-xs mt-1 opacity-75 cursor-pointer';
+                dismissText.textContent = 'Tap to hide';
+                dismissText.onclick = hideMessage;
+                msgDiv.appendChild(dismissText);
+            }
+
+            targetArea.appendChild(msgDiv);
+            currentMessageElement = msgDiv;
+            
+            clearError();
+        }
+
+        /** Hides the message box. */
+        function hideMessage() {
+            if (currentMessageElement) {
+                currentMessageElement.style.display = 'none';
+            }
         }
         
         /**
-         * Shows the API Key modal, pre-populating if a key exists.
-         */
-        window.showApiModal = function() {
-            const modal = document.getElementById('apiModal');
-            const input = document.getElementById('apiKeyInput');
-            input.value = getApiKey() || '';
-            modal.classList.remove('hidden');
-        }
-
-        /**
-         * Saves the API key to local storage and hides the modal.
-         */
-        window.saveAndCloseApiModal = function() {
-            const input = document.getElementById('apiKeyInput');
-            const key = input.value.trim();
-            if (key) {
-                localStorage.setItem('geminiApiKey', key);
-                resultMessage.innerHTML = `<p class="text-green-600">API Key saved successfully! Ready to analyze images.</p>`;
-            } else {
-                localStorage.removeItem('geminiApiKey');
-                resultMessage.innerHTML = `<p class="text-red-600">Warning: API Key removed or not provided. Image analysis will not work.</p>`;
-            }
-            document.getElementById('apiModal').classList.add('hidden');
-        }
-
-        // --- Error Handling Utilities ---
-
-        /**
          * Sets an error state on the UI.
-         * @param {string} summary - The visible error message.
-         * @param {string} details - The detailed technical error (for the expandable section).
          */
         function setError(summary, details = null) {
+            if (!errorContainer || !errorSummary || !errorDetails) return; // ADDED NULL CHECK
+
             errorSummary.textContent = `Error: ${summary}`;
             errorDetails.textContent = details || summary;
             errorContainer.classList.remove('hidden');
-            resultMessage.classList.add('hidden'); // Hide result when error is shown
-            errorDetails.classList.add('hidden'); // Ensure details are collapsed initially
+            
+            // Hide any success/ready messages when an error occurs
+            hideMessage();
+            errorDetails.classList.add('hidden'); 
             errorIcon.style.transform = 'rotate(0deg)';
         }
 
         /**
-         * Clears the error state and shows the result message area.
+         * Clears the error state.
          */
         function clearError() {
-            errorContainer.classList.add('hidden');
-            resultMessage.classList.remove('hidden');
+            if (errorContainer) { // ADDED NULL CHECK to fix reported error
+                errorContainer.classList.add('hidden');
+            }
         }
 
         /**
          * Toggles the visibility of the detailed error message.
          */
         window.toggleErrorDetails = function() {
+            if (!errorDetails || !errorIcon || !errorContainer) return; // ADDED NULL CHECK
+
             const isHidden = errorDetails.classList.contains('hidden');
             if (isHidden) {
                 errorDetails.classList.remove('hidden');
@@ -312,22 +320,65 @@
                 errorIcon.style.transform = 'rotate(0deg)';
             }
         }
+
+        // --- API Key Management ---
+
+        function getApiKey() {
+            return localStorage.getItem('geminiApiKey');
+        }
         
+        /** Loads settings from localStorage and shows the modal. */
+        window.showApiModal = function() {
+            const isVisible = localStorage.getItem(MESSAGE_KEY) === 'true';
+            const position = localStorage.getItem(POSITION_KEY) || 'top';
+            
+            apiKeyInput.value = getApiKey() || '';
+            msgVisibleToggle.checked = isVisible;
+            document.querySelector(`input[name="msgPosition"][value="${position}"]`).checked = true;
+            
+            updateMessageVisibility(); // Run once to set radio button disabled state
+            document.getElementById('apiModal').classList.remove('hidden');
+        }
+
+        /** Saves settings and API key. */
+        window.saveAndCloseApiModal = function() {
+            const key = apiKeyInput.value.trim();
+            const isVisible = msgVisibleToggle.checked;
+            const position = document.querySelector('input[name="msgPosition"]:checked').value;
+
+            localStorage.setItem(MESSAGE_KEY, isVisible);
+            localStorage.setItem(POSITION_KEY, position);
+
+            if (key) {
+                localStorage.setItem('geminiApiKey', key);
+                displayMessage(`<p class="font-bold">API Key saved successfully!</p>`, 'green', true);
+            } else {
+                localStorage.removeItem('geminiApiKey');
+                displayMessage(`<p class="font-bold">API Key removed. Image analysis is now disabled.</p>`, 'red', true);
+            }
+            document.getElementById('apiModal').classList.add('hidden');
+            
+            // Re-run init status on UI
+            checkInitialStatus();
+        }
+        
+        /** Toggles disabled state of radio buttons based on visibility toggle. */
+        window.updateMessageVisibility = function() {
+            const isChecked = msgVisibleToggle.checked;
+            const radios = msgPositionRadios.querySelectorAll('input');
+            radios.forEach(radio => radio.disabled = !isChecked);
+            msgPositionRadios.classList.toggle('opacity-50', !isChecked);
+        }
+
         // --- Core Application Logic ---
 
-        /**
-         * Converts a File object to a Base64 encoded string.
-         */
         const toBase64 = (file) => new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = () => {
                 const parts = reader.result.split(',');
                 if (parts.length === 2) {
-                    resolve({
-                        base64: parts[1],
-                        mimeType: file.type
-                    });
+                    resolve({ base64: parts[1], mimeType: file.type });
                 } else {
                     reject(new Error("Failed to read file as Base64."));
                 }
@@ -335,9 +386,6 @@
             reader.onerror = error => reject(error);
         });
 
-        /**
-         * Retries the fetch request with exponential backoff.
-         */
         const backoffFetch = async (url, options, attempt = 1) => {
             try {
                 const response = await fetch(url, options);
@@ -359,16 +407,21 @@
 
         /**
          * Handles processing the input file (upload, camera, or drag/drop).
+         * @param {Event|FileList} source - The event or dropped files.
+         * @param {string} mode - 'item' or 'barcode' analysis mode.
          */
-        window.previewImage = async function(source) {
+        window.previewImage = async function(source, mode) {
             clearError();
+            hideMessage();
             let file = null;
 
             if (source instanceof Event && source.target.files) {
                 file = source.target.files[0];
             } else if (source instanceof FileList) {
-                file = source[0]; // Take the first dropped file
+                file = source[0];
             }
+
+            analysisMode = mode;
 
             if (file) {
                 try {
@@ -380,7 +433,9 @@
                     fileNameDisplay.textContent = file.name;
                     imagePreview.innerHTML = `<img src="data:${mimeType};base64,${base64Image}" alt="Uploaded Item Preview" class="object-contain h-full w-full">`;
                     analyzeButton.disabled = false;
-                    resultMessage.innerHTML = `<p>Image ready for analysis. Click "Analyze Image".</p>`;
+                    
+                    const action = mode === 'barcode' ? 'Read Barcode' : 'Analyze Item';
+                    displayMessage(`<p>Image ready for analysis. Click the Analyze Image button to ${action}.</p>`, 'green');
 
                 } catch (error) {
                     setError("File read error.", error.message);
@@ -390,7 +445,17 @@
                 }
             } else {
                 // Reset state
-                previewImage(null); // Call with null to reset UI
+                base64Image = null;
+                mimeType = null;
+                fileNameDisplay.textContent = "No file selected.";
+                imagePreview.innerHTML = `
+                    <p class="text-gray-500 text-center text-sm font-semibold">
+                        Drag and Drop Image Here
+                        <br>
+                        <span class="text-xs text-gray-400">or use the buttons above.</span>
+                    </p>`;
+                analyzeButton.disabled = true;
+                checkInitialStatus(); // Re-check if API key is missing
             }
         }
         
@@ -402,6 +467,7 @@
         }
 
         window.handleDragLeave = function(event) {
+            event.preventDefault(); 
             imagePreview.classList.remove('border-primary-red', 'bg-soft-red');
             imagePreview.classList.add('border-gray-300', 'bg-gray-100');
         }
@@ -412,17 +478,18 @@
             imagePreview.classList.add('border-gray-300', 'bg-gray-100');
 
             if (event.dataTransfer.files.length) {
-                previewImage(event.dataTransfer.files);
+                previewImage(event.dataTransfer.files, 'item'); // Default to item analysis on drag/drop
             }
         }
         
         // --- Voice Input ---
         window.startVoiceInput = function() {
             clearError();
+            hideMessage();
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
             if (!SpeechRecognition) {
-                setError("Voice Recognition Not Supported.", "Your browser does not support the Web Speech API. Please use a manual input or a different browser (e.g., Chrome/mobile browsers).");
+                setError("Voice Recognition Not Supported.", "Your browser does not support the Web Speech API.");
                 return;
             }
 
@@ -442,9 +509,9 @@
                 confirmedItemInput.value = transcript;
 
                 if (transcript.length > 2) {
-                    resultMessage.innerHTML = `<p>Voice transcription complete: <strong>"${transcript}"</strong>. Ready to search.</p>`;
+                    displayMessage(`Voice transcription complete: <strong>"${transcript}"</strong>. Ready to search.`, 'green');
                 } else {
-                    resultMessage.innerHTML = `<p class="text-red-600">Could not detect a clear item name. Try again.</p>`;
+                    displayMessage(`Could not detect a clear item name. Try again.`, 'red');
                 }
             };
 
@@ -464,91 +531,42 @@
             recognition.start();
         }
 
-
-        // --- Barcode Scanning Functions ---
-
-        window.startBarcodeScanner = function() {
-            if (scannerRunning) return;
-            clearError();
-
-            scannerView.classList.remove('hidden');
-            scanButton.disabled = true;
-            resultMessage.innerHTML = `<p>Starting barcode scanner... Please point camera at a barcode.</p>`;
-
-            Quagga.init({
-                inputStream : {
-                    name : "Live",
-                    type : "LiveStream",
-                    target: document.querySelector('#interactive'),
-                    constraints: { facingMode: "environment" }
-                },
-                decoder: {
-                    readers : ["ean_reader", "upc_reader", "code_39_reader"]
-                }
-            }, function(err) {
-                if (err) {
-                    stopBarcodeScanner();
-                    setError("Scanner failed to start.", `Check browser permissions or device support. Error: ${err.name || err.message}`);
-                    return;
-                }
-                Quagga.start();
-                scannerRunning = true;
-                resultMessage.innerHTML = `<p>Scanner started! Point your camera at a UPC or ISBN barcode.</p>`;
-            });
-
-            Quagga.onDetected(function(result) {
-                if (result.codeResult) {
-                    const code = result.codeResult.code;
-                    stopBarcodeScanner(); 
-
-                    confirmedItemInput.value = code;
-                    resultMessage.innerHTML = `<p class="text-green-600 font-bold">Barcode Identified: ${code}. Ready to search eBay.</p>`;
-                }
-            });
-        }
-
-        window.stopBarcodeScanner = function() {
-            if (scannerRunning) {
-                Quagga.stop();
-                scannerRunning = false;
-                scannerView.classList.add('hidden');
-                scanButton.disabled = false;
-                resultMessage.innerHTML = `<p>Scanner stopped. Ready for next input.</p>`;
-            }
-        }
-
         /**
-         * Calls the Gemini API to identify the item in the image.
+         * Calls the Gemini API to identify the item or barcode in the image.
+         * @param {string} mode - 'item' or 'barcode'
          */
         window.analyzeImage = async function() {
             clearError();
+            hideMessage();
             const apiKey = getApiKey();
             
             if (!apiKey) {
-                setError("API Key Missing.", "Please open the hamburger menu (top right) and save your Gemini API key.");
-                showApiModal();
+                setError("API Key Missing.", "Please open the Settings menu (top right) and save your Gemini API key.");
                 return;
             }
 
             if (!base64Image || !mimeType) {
-                setError("No Image Selected.", "Please upload, capture, or drag an image first.");
+                setError("No Image Selected.", "Please use one of the image input methods first.");
                 return;
             }
             
-            stopBarcodeScanner(); // Ensure scanner is stopped
+            // Set query based on mode
+            const prompt = analysisMode === 'barcode' 
+                ? "Read the UPC, ISBN, or other clear barcode number from this image. Only return the number, with no other text, punctuation, or explanation."
+                : "Identify the main object in this image and describe it clearly and concisely, suitable for an eBay search term. Do not include any extra introductory text, just the item name/description.";
 
             // Update UI for loading state
             analyzeButton.disabled = true;
             analyzeButton.textContent = 'Analyzing...';
             confirmedItemInput.value = '';
-            resultMessage.innerHTML = `<p>Sending image to Gemini for identification. Please wait...</p>`;
-
-            const userQuery = "Identify the main object in this image and describe it clearly and concisely, suitable for an eBay search term. For example, if it's a 'Rolex watch model 12345', return 'Rolex Submariner 12345'. Do not include any extra introductory text, just the item name/description.";
+            
+            const actionMessage = analysisMode === 'barcode' ? 'reading barcode' : 'identifying item';
+            displayMessage(`Gemini is ${actionMessage}... Please wait.`, 'green');
 
             const payload = {
                 contents: [{
                     parts: [
-                        { text: userQuery },
+                        { text: prompt },
                         {
                             inlineData: {
                                 mimeType: mimeType,
@@ -579,10 +597,12 @@
                 if (identifiedText) {
                     const cleanedText = identifiedText.replace(/['"]/g, '').replace(/<[^>]+>/g, '').trim();
                     confirmedItemInput.value = cleanedText;
-                    resultMessage.innerHTML = `<p class="font-bold">Item Identified: <strong>"${cleanedText}"</strong>. Review the term and click 'Search eBay SOLD Listings'.</p>`;
+                    
+                    const successLabel = analysisMode === 'barcode' ? 'Barcode Read' : 'Item Identified';
+                    displayMessage(`<p class="font-bold">${successLabel}: <strong>"${cleanedText}"</strong>. Ready to search eBay.</p>`, 'green');
                 } else {
                     confirmedItemInput.value = '';
-                    resultMessage.innerHTML = `<p class="font-bold text-red-600">Item not found. Please try a clearer picture or manually enter the name.</p>`;
+                    displayMessage(`Item not found. Please try a clearer picture or manually enter the name.`, 'red');
                 }
 
             } catch (error) {
@@ -601,6 +621,12 @@
          * Constructs the eBay search URL for sold items and opens it in a new tab.
          */
         window.openEbaySearch = function() {
+            // Hide the message field on the first successful search.
+            if (localStorage.getItem(MESSAGE_KEY) === 'true') {
+                 localStorage.setItem(MESSAGE_KEY, 'false');
+                 hideMessage();
+            }
+
             clearError();
             const itemQuery = confirmedItemInput.value.trim();
 
@@ -609,25 +635,36 @@
                 return;
             }
             
-            stopBarcodeScanner();
-
             // Encode the item query for use in a URL
             const encodedQuery = encodeURIComponent(itemQuery);
 
             // Construct the eBay search URL with filters for completed and sold items
             const ebayUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodedQuery}&LH_Complete=1&LH_Sold=1`;
 
-            resultMessage.innerHTML = `<p>Searching eBay for sold listings of: <strong>"${itemQuery}"</strong>...</p>`;
+            displayMessage(`<p>Searching eBay for sold listings of: <strong>"${itemQuery}"</strong>...</p>`, 'green');
             window.open(ebayUrl, '_blank');
         }
+        
+        /** Checks for API key and sets the initial message status on load. */
+        function checkInitialStatus() {
+            if (!getApiKey()) {
+                 displayMessage(`Please enter your Gemini API key via the Settings menu (top right). Image analysis is currently disabled.`, 'red');
+            } else {
+                 displayMessage(`API Key loaded. Ready to find your item!`, 'green');
+            }
+        }
 
-        // Initialize to ensure the button starts disabled
+        // Initialize on load
         window.onload = function() {
             analyzeButton.disabled = true;
-            // Check if key is present on load and update status message
-            if (!getApiKey()) {
-                 resultMessage.innerHTML = `<p class="text-red-600">Please enter your Gemini API key via the menu (top right).</p>`;
+            
+            // Set initial message visibility preference
+            if (localStorage.getItem(MESSAGE_KEY) === null) {
+                // Default to showing the message
+                localStorage.setItem(MESSAGE_KEY, 'true'); 
+                localStorage.setItem(POSITION_KEY, 'top');
             }
+            checkInitialStatus();
         };
 
     </script>
